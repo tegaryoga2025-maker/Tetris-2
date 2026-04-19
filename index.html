@@ -1,0 +1,69 @@
+<!DOCTYPE html><html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Neon Mobile Tetris</title>
+<style>
+body{margin:0;font-family:Arial,sans-serif;background:radial-gradient(circle at top,#b4e45a,#090909);color:#fff;display:flex;justify-content:center;align-items:center;min-height:100vh}
+.wrap{width:100%;max-width:420px;padding:12px;text-align:center}
+canvas{background:#050505;border:2px solid #8b5cf6;box-shadow:0 0 20px rgba(1, 50, 32, 1);width:100%;max-width:300px;height:auto;border-radius:12px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+button{padding:10px 14px;border:none;border-radius:12px;background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff;font-weight:bold;box-shadow:0 6px 14px rgba(0,0,0,.35)}
+.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:300px;margin:12px auto}
+.controls button{font-size:20px;padding:14px}
+.full{grid-column:1/4}
+.small{font-size:14px}
+</style>
+</head>
+<body>
+<div class='wrap'>
+<div class='top'><button id='pause'>Pause</button><div>Score: <span id='score'>0</span> | High: <span id='high'>0</span> | Level: <span id='level'>1</span></div><button id='restart'>Restart</button></div>
+<canvas id='game' width='240' height='400'></canvas>
+<div class='controls'>
+<button id='left'>◀</button><button id='rotate'>⟳</button><button id='right'>▶</button>
+<button class='full' id='down'>▼ Turun Cepat</button>
+</div>
+<div class='small'>Tap tombol untuk main</div><audio id='bgm' loop></audio>
+</div>
+<script>
+const cvs=document.getElementById('game'),ctx=cvs.getContext('2d');
+const COLS=10,ROWS=20,SIZE=20; let board,score,level,high=+localStorage.getItem('tetrisHigh')||0,dropCounter,last=0,dropInterval=600,gameOver=false,paused=false;
+const colors=[null,'#00f0f0','#f0f000','#a000f0','#00f000','#f00000','#0000f0','#f0a000'];
+const shapes=[[],[[1,1,1,1]],[[2,2],[2,2]],[[0,3,0],[3,3,3]],[[0,4,4],[4,4,0]],[[5,5,0],[0,5,5]],[[6,0,0],[6,6,6]],[[0,0,7],[7,7,7]]];
+function reset(){board=Array.from({length:ROWS},()=>Array(COLS).fill(0));score=0;level=1;dropInterval=600;dropCounter=0;gameOver=false;updateScore();spawn();}
+let piece={x:0,y:0,matrix:null};
+function spawn(){piece.matrix=JSON.parse(JSON.stringify(shapes[Math.floor(Math.random()*7)+1]));piece.y=0;piece.x=((COLS/2)|0)-((piece.matrix[0].length/2)|0);if(collide()){gameOver=true;}}
+function drawCell(x,y,v){const px=x*SIZE,py=y*SIZE;const g=ctx.createLinearGradient(px,py,px+SIZE,py+SIZE);g.addColorStop(0,'#ffffff');g.addColorStop(.2,colors[v]);g.addColorStop(1,'#111111');ctx.fillStyle=g;ctx.fillRect(px,py,SIZE-1,SIZE-1);ctx.fillStyle='rgba(255,255,255,.28)';ctx.fillRect(px+2,py+2,SIZE-7,4);ctx.fillStyle='rgba(0,0,0,.25)';ctx.fillRect(px+4,py+SIZE-6,SIZE-8,3);ctx.strokeStyle='rgba(255,255,255,.35)';ctx.strokeRect(px+1,py+1,SIZE-3,SIZE-3);} 
+function draw(){ctx.fillStyle='#000';ctx.fillRect(0,0,cvs.width,cvs.height);board.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(x,y,v)));piece.matrix.forEach((r,y)=>r.forEach((v,x)=>v&&drawCell(piece.x+x,piece.y+y,v)));if(gameOver){ctx.fillStyle='rgba(0,0,0,.7)';ctx.fillRect(0,0,cvs.width,cvs.height);ctx.fillStyle='#fff';ctx.font='24px Arial';ctx.fillText('Game Over',55,200);} if(paused&&!gameOver){ctx.fillStyle='rgba(0,0,0,.6)';ctx.fillRect(0,0,cvs.width,cvs.height);ctx.fillStyle='#fff';ctx.font='24px Arial';ctx.fillText('Paused',80,200);} }
+function collide() {
+    for (let y = 0; y < piece.matrix.length; y++) {
+        for (let x = 0; x < piece.matrix[y].length; x++) {
+            if (piece.matrix[y][x] !== 0) {
+                if (
+                    board[y + piece.y] === undefined || 
+                    board[y + piece.y][x + piece.x] === undefined || 
+                    board[y + piece.y][x + piece.x] !== 0
+                ) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+function beep(f=440,d=0.08){const a=new(window.AudioContext||window.webkitAudioContext)();const o=a.createOscillator(),g=a.createGain();o.frequency.value=f;o.connect(g);g.connect(a.destination);g.gain.value=.03;o.start();o.stop(a.currentTime+d);} function merge(){beep(220,.05);piece.matrix.forEach((r,y)=>r.forEach((v,x)=>{if(v)board[y+piece.y][x+piece.x]=v;}));}
+function sweep(){let lines=0;outer:for(let y=ROWS-1;y>=0;y--){for(let x=0;x<COLS;x++)if(board[y][x]===0)continue outer;board.splice(y,1);board.unshift(Array(COLS).fill(0));lines++;y++;}if(lines){beep(700,.12);score+=lines*100;level=1+Math.floor(score/500);dropInterval=Math.max(90,600-(level-1)*55);updateScore();}}
+function updateScore(){if(score>high){high=score;localStorage.setItem('tetrisHigh',high);}document.getElementById('score').textContent=score;document.getElementById('high').textContent=high;document.getElementById('level').textContent=level;}
+function drop(){piece.y++;if(collide()){piece.y--;merge();sweep();spawn();}dropCounter=0;}
+function move(dir){piece.x+=dir;if(collide())piece.x-=dir;}
+function rotate(){const m=piece.matrix;const res=m[0].map((_,i)=>m.map(r=>r[i]).reverse());const old=m.slice();piece.matrix=res;if(collide())piece.matrix=old;}
+function update(t=0){const delta=t-last;last=t;dropCounter+=delta;if(dropCounter>dropInterval&&!gameOver&&!paused)drop();draw();requestAnimationFrame(update);} 
+document.getElementById('left').onclick=()=>{beep(330,.03);move(-1)};
+document.getElementById('right').onclick=()=>{beep(330,.03);move(1)};
+document.getElementById('down').onclick=()=>{beep(280,.03);drop();};
+document.getElementById('rotate').onclick=()=>{beep(520,.03);rotate();};
+document.getElementById('restart').onclick=()=>reset();document.getElementById('pause').onclick=()=>{paused=!paused;document.getElementById('pause').textContent=paused?'Resume':'Pause';beep(500,.05);};
+reset();update();
+</script>
+</body>
+</html>
